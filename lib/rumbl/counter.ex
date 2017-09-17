@@ -1,38 +1,45 @@
 defmodule Rumbl.Counter do
+  use GenServer
   # pid is id of server process
-  def inc(pid), do: send(pid, :inc)
+  def inc(pid), do: GenServer.cast(pid, :inc) 
   
-  def dec(pid), do: send(pid, :dec)
+  def dec(pid), do: GenServer.cast(pid, :dec) 
 
-  def val(pid, timeout \\ 5000) do
-    # make_ref() is a unique reference to the request
-    ref = make_ref()
-              # 3-tuple with an atom
-    send(pid, {:val, self(), ref})
-    receive do
-      # only match on tuples that have the exact ref
-      # exit after timeout if no match
-      {^ref, val} -> val
-    after timeout -> exit(:timeout)
-    end
+  def val(pid) do
+    GenServer.call(pid, :val)
   end
 
   def start_link(initial_val) do
-    {:ok, spawn_link(fn -> listen(initial_val) end)}
+    # current module name
+    # initial_val
+    GenServer.start_link(__MODULE__, initial_val)
   end
 
-  # server
-  defp listen(val) do
-    # using recursion to manage state
-    # When the last thing you do in a function is call the function itself,
-    # the function is tail recursive
-    # normally bad, but elixir processes are cheap
-    receive do
-      :inc -> listen(val + 1)
-      :dec -> listen(val - 1)
-      {:val, sender, ref} -> 
-        send sender, {ref, val}
-        listen(val)
-    end
+  def init(initial_val) do
+    Process.send_after(self, :tick, 1000)
+    {:ok, initial_val}
   end
+
+  def handle_info(:tick, val) when val <= 0, do: raise "boom!"
+
+  def handle_info(:tick, val) do
+    IO.puts "tick #{val}"
+    Process.send_after(self, :tick, 1000)
+    {:noreply, val - 1}
+  end
+
+  def handle_cast(:inc, val) do
+    {:noreply, val + 1}
+  end
+
+  def handle_cast(:dec, val) do
+    {:noreply, val - 1}
+  end
+
+  # _from is a wildcard match function
+  #
+  def handle_call(:val, _from, val) do
+    {:reply, val, val}
+  end
+
 end
